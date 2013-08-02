@@ -27,7 +27,7 @@ func NewClient(userAgent string) *Client {
 	if err != nil {
 		return nil
 	}
-	return &Client{httpClient: &http.Client{Jar: jar}, UserAgent: userAgent, lock: make(chan bool, 1), lastAccess: time.Now().Add(-DELAY_S),}
+	return &Client{httpClient: &http.Client{Jar: jar}, UserAgent: userAgent, lock: make(chan bool, 1), lastAccess: time.Now().Add(-DELAY_S)}
 }
 
 // private utility function to do an API request
@@ -38,6 +38,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if td < DELAY_S {
 		time.Sleep(DELAY_S - td)
 	}
+	c.lastAccess = time.Now()
 	req.Header.Set("User-Agent", c.UserAgent)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -47,7 +48,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-// Struct representing the resposne from /api/login
+// Struct representing the response from /api/login
 type loginResponse struct {
 	Json struct {
 		Errors [][]string
@@ -94,85 +95,132 @@ func (c *Client) Login(user string, passwd string) (bool, error) {
 	return true, nil
 }
 
-// Recursive data structure for "things" on Reddit
+// A "thing" on Reddit
 type Thing struct {
+	Id string
 	Kind string
+	Name string
+}
+
+// A comment
+type Comment struct {
+	Thing
 	Data struct {
-		After string
-		Before string
-		Children []Thing
+		Thing
+		Body string
+		Body_html string
 		Downs int
 		Id string
 		Modhash string
 		Name string
 		Permalink string
-		Replies interface{} // Reddit returns "" for empty but {} for non-empty, so we need to accomodate both
+		Replies json.RawMessage
 		Score int
 		Title string
 		Ups int
 	}
 }
 
-// Utility function that performs a request that returns a thing
-func (c *Client) getThing(req *http.Request) (*Thing, error) {
-	resp, err := c.do(req)
-	if err != nil {
-		return nil, err
+// A link
+type Link struct {
+	Thing
+	Data struct {
+		Thing
+		Downs int
+		Id string
+		Modhash string
+		Name string
+		Permalink string
+		Score int
+		Title string
+		Ups int
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	var data Thing
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		return nil, err
-	}
-	return &data, err
 }
 
-// Utility function that performs a request that returns a JSON array of things
-func (c *Client) getThings(req *http.Request) (*[]Thing, error) {
-	resp, err := c.do(req)
-	if err != nil {
-		return nil, err
+// A listing of links
+type LinkListing struct {
+	Data struct {
+		Modhash string
+		Children []Link // since children can be different types
+		After string
+		Before string
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return nil, err
+	Kind string
+}
+
+// A listing of comments
+type CommentListing struct {
+	Data struct {
+		Modhash string
+		Children []Comment // since children can be different types
+		After string
+		Before string
 	}
-	var data []Thing
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		return nil, err
-	}
-	return &data, err
+	Kind string
 }
 
 // Get posts in a subreddit
 // TODO: implement sorting
-func (c *Client) GetSubreddit(sr string, sort string, limit int) (*Thing, error) {
+func (c *Client) GetSubreddit(sr string, sort string, limit int) ([]Link, error) {
 	params := make(url.Values)
 	params.Set("limit", string(limit))
+	params.Set("sort", sort)
 	req, err := http.NewRequest("GET", fmt.Sprintf("%v/r/%v.json?%v", REDDIT_URL, sr, params.Encode()), nil)
 	if err != nil {
 		return nil, err
 	}
-	return c.getThing(req)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	var data LinkListing
+	err = json.Unmarshal(body, &data)
+	if err != nil {
+		return nil, err
+	}
+	return data.Data.Children, err
 }
+
 
 // Get comments for a specific thing ID
 // TODO: implement sorting
-func (c *Client) GetComments(id string, sort string, limit int) (*[]Thing, error) {
+func (c *Client) GetComments(id string, sort string, limit int) ([]Comment, error) {
 	params := make(url.Values)
 	params.Set("limit", string(limit))
+	params.Set("sort", sort)
 	req, err := http.NewRequest("GET", fmt.Sprintf("%v/comments/%v.json?%v", REDDIT_URL, id, params.Encode()), nil)
 	if err != nil {
 		return nil, err
 	}
-	return c.getThings(req)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	//fmt.Println(string(body))
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	var data []json.RawMessage
+	err = json.Unmarshal(body, &data)
+	if err != nil || len(data) != 2 {
+		return nil, err
+	}
+	var cl CommentListing
+	err = json.Unmarshal(data[1], &cl)
+	return cl.Data.Children, err
+}
+
+func (cl *Comment) GetReplies() ([]Comment, error) {
+ 	var replies CommentListing
+ 	err := json.Unmarshal(cl.Data.Replies, &replies)
+ 		return replies.Data.Children, err
 }
 
 // Vote on a thing

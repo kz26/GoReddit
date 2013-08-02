@@ -3,11 +3,11 @@ package goreddit
 import "fmt"
 import "testing"
 
-const TEST_USER_AGENT = ""
+const TEST_USER_AGENT = "GoReddit-TestSuite"
 
 func TestLogin(t *testing.T) {
-	client := NewClient("Test/1.0")
 	t.Skip("Login test skipped")
+	client := NewClient(TEST_USER_AGENT)
 	_, err := client.Login("user", "password")
 	if err != nil {
 		t.Error(err)
@@ -18,8 +18,8 @@ func TestLogin(t *testing.T) {
 }
 
 func TestGetSubreddit(t *testing.T) {
-	client := NewClient("Test2/1.0")
-	listing, err := client.GetSubreddit("news", "hot", 2)
+	client := NewClient(TEST_USER_AGENT)
+	listing, err := client.GetSubreddit("news", "new", 5)
 	if err != nil {
 		t.Error(err)
 	} else {
@@ -27,19 +27,22 @@ func TestGetSubreddit(t *testing.T) {
 	}
 }
 
+
 func TestGetComments(t *testing.T) {
-	client := NewClient("Test2/1.0")
-	srListing, err := client.GetSubreddit("news", "hot", 2)
+	client := NewClient(TEST_USER_AGENT)
+	srListing, err := client.GetSubreddit("news", "hot", 1)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	firstLinkID := srListing.Data.Children[0].Data.Id
+	fmt.Println()
+	firstLinkID := srListing[0].Data.Id
 	fmt.Println(firstLinkID)
-	comments, err := client.GetComments(firstLinkID, "hot", 25)
+	comments, err := client.GetComments(firstLinkID, "hot", 2)
 	if err != nil {
 		t.Error(err)
 	} else {
-		fmt.Println(comments)
+		fc, _ := comments[0].GetReplies()
+		fmt.Println(fc[0].Data.Body)
 	}
 }
