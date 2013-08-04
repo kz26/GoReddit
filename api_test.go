@@ -8,7 +8,7 @@ const TEST_USER_AGENT = "GoReddit-TestSuite"
 func TestLogin(t *testing.T) {
 	t.Skip("Login test skipped")
 	client := NewClient(TEST_USER_AGENT)
-	_, err := client.Login("user", "password")
+	err := client.Login("user", "password")
 	if err != nil {
 		t.Error(err)
 	} else {

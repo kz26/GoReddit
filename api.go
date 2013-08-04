@@ -7,6 +7,7 @@ import "io/ioutil"
 import "net/http"
 import "net/http/cookiejar"
 import "net/url"
+import "strconv"
 import "time"
 
 const REDDIT_URL = "https://ssl.reddit.com"
@@ -60,80 +61,84 @@ type loginResponse struct {
 }
 
 // Perform a login using the given username and password
-func (c *Client) Login(user string, passwd string) (bool, error) {
+func (c *Client) Login(user string, passwd string) error {
 	params := make(url.Values)
 	params.Set("api_type", "json")
 	params.Set("user", user)
 	params.Set("passwd", passwd)
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/%v?%v", REDDIT_URL, "api/login", params.Encode()), nil)
 	if err != nil {
-		return false, err
+		return err
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return false, err
+		return err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return false, err
+		return err
 	}
 	resp.Body.Close()
 	var data loginResponse
 	err = json.Unmarshal(body, &data)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if data.Json.Data.Modhash == "" {
 		if len(data.Json.Errors) > 0 {
-			return false, errors.New(fmt.Sprint(data.Json.Errors[0]))
+			return errors.New(fmt.Sprint(data.Json.Errors[0]))
 		} else {
-			return false, errors.New("Unknown login error")
+			return errors.New("Unknown login error")
 		}
 	} else {
 		c.modhash = data.Json.Data.Modhash
 	}
-	return true, nil
+	return nil
 }
 
-// A "thing" on Reddit
-type Thing struct {
-	Id string
-	Kind string
-	Name string
+// Fields for things that implement Votable
+type Votable struct {
+	Downs int
+	Ups int
+	Likes json.RawMessage // can't use bool here since Reddit also uses null; just check the raw string value if you need this field
+}
+
+// Fields for things that implement Created
+type Created struct {
+	Created float64
+	Created_utc float64
 }
 
 // A comment
 type Comment struct {
-	Thing
+	Kind string
 	Data struct {
-		Thing
+		Votable
+		Created
+
 		Body string
 		Body_html string
-		Downs int
 		Id string
-		Modhash string
 		Name string
 		Permalink string
 		Replies json.RawMessage
 		Score int
 		Title string
-		Ups int
 	}
 }
 
 // A link
 type Link struct {
-	Thing
+	Kind string
 	Data struct {
-		Thing
-		Downs int
+		Votable
+		Created
+
 		Id string
-		Modhash string
 		Name string
 		Permalink string
 		Score int
 		Title string
-		Ups int
 	}
 }
 
@@ -141,7 +146,7 @@ type Link struct {
 type LinkListing struct {
 	Data struct {
 		Modhash string
-		Children []Link // since children can be different types
+		Children []Link
 		After string
 		Before string
 	}
@@ -152,7 +157,7 @@ type LinkListing struct {
 type CommentListing struct {
 	Data struct {
 		Modhash string
-		Children []Comment // since children can be different types
+		Children []Comment
 		After string
 		Before string
 	}
@@ -163,9 +168,8 @@ type CommentListing struct {
 // TODO: implement sorting
 func (c *Client) GetSubreddit(sr string, sort string, limit int) ([]Link, error) {
 	params := make(url.Values)
-	params.Set("limit", string(limit))
-	params.Set("sort", sort)
-	req, err := http.NewRequest("GET", fmt.Sprintf("%v/r/%v.json?%v", REDDIT_URL, sr, params.Encode()), nil)
+	params.Set("limit", strconv.Itoa(limit))
+	req, err := http.NewRequest("GET", fmt.Sprintf("%v/r/%v/%v.json?%v", REDDIT_URL, sr, sort, params.Encode()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +195,7 @@ func (c *Client) GetSubreddit(sr string, sort string, limit int) ([]Link, error)
 // TODO: implement sorting
 func (c *Client) GetComments(id string, sort string, limit int) ([]Comment, error) {
 	params := make(url.Values)
-	params.Set("limit", string(limit))
+	params.Set("limit", strconv.Itoa(limit))
 	params.Set("sort", sort)
 	req, err := http.NewRequest("GET", fmt.Sprintf("%v/comments/%v.json?%v", REDDIT_URL, id, params.Encode()), nil)
 	if err != nil {
@@ -225,9 +229,9 @@ func (cl *Comment) GetReplies() ([]Comment, error) {
 
 // Vote on a thing
 // id: thing id, dir: 1, 0, -1 for upvote, null vote, and downvote, respectively
-func (c *Client) Vote(id string, dir int) (bool, error) {
+func (c *Client) Vote(id string, dir int) error {
 	if c.modhash == "" {
-		return false, errors.New("Login required")
+		return errors.New("Login required")
 	}
 	params := make(url.Values)
 	params.Set("id", id)
@@ -235,20 +239,20 @@ func (c *Client) Vote(id string, dir int) (bool, error) {
 	params.Set("uh", c.modhash)
 	req, err := http.NewRequest("POST", fmt.Sprintf("%v/%v?%v", REDDIT_URL, "api/vote", params.Encode()), nil)
 	if err != nil {
-		return false, err
+		return err
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return false, err
+		return err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return false, err
+		return err
 	}
 	if string(body) == "{}" {
-		return true, nil
+		return nil
 	} else {
-		return false, errors.New("Vote failed")
+		return errors.New("Vote failed")
 	}
 }
