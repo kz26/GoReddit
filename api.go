@@ -116,6 +116,7 @@ type Comment struct {
 		Votable
 		Created
 
+		Author string
 		Body string
 		Body_html string
 		Id string
@@ -221,10 +222,31 @@ func (c *Client) GetComments(id string, sort string, limit int) ([]Comment, erro
 	return cl.Data.Children, err
 }
 
-func (cl *Comment) GetReplies() ([]Comment, error) {
+func (com *Comment) GetReplies() ([]Comment, error) {
  	var replies CommentListing
- 	err := json.Unmarshal(cl.Data.Replies, &replies)
+ 	err := json.Unmarshal(com.Data.Replies, &replies)
  		return replies.Data.Children, err
+}
+
+// Returns a flattened list of comments and replies
+func GetCommentsFlat(comList []Comment) []Comment {
+	cids := make([]Comment, len(comList))
+	var fh func(cl []Comment)
+	fh = func(cl []Comment) {
+		for _, com := range cl {
+			if com.Data.Author != "[deleted]" {
+				cids = append(cids, com)
+			}
+			replies, err := com.GetReplies()
+			if err == nil {
+				if len(replies) > 0 {
+					fh(replies)
+				}
+			}
+		}
+	}
+	fh(comList)
+	return cids
 }
 
 // Vote on a thing

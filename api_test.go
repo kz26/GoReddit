@@ -30,7 +30,7 @@ func TestGetSubreddit(t *testing.T) {
 
 func TestGetComments(t *testing.T) {
 	client := NewClient(TEST_USER_AGENT)
-	srListing, err := client.GetSubreddit("news", "hot", 1)
+	srListing, err := client.GetSubreddit("news", "hot", 5)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -38,11 +38,12 @@ func TestGetComments(t *testing.T) {
 	fmt.Println()
 	firstLinkID := srListing[0].Data.Id
 	fmt.Println(firstLinkID)
-	comments, err := client.GetComments(firstLinkID, "hot", 2)
+	comments, err := client.GetComments(firstLinkID, "hot", 25)
 	if err != nil {
 		t.Error(err)
 	} else {
 		fc, _ := comments[0].GetReplies()
+		fmt.Println(GetCommentsFlat(comments))
 		fmt.Println(fc[0].Data.Body)
 	}
 }
