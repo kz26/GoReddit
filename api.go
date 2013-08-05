@@ -135,8 +135,13 @@ type Link struct {
 		Votable
 		Created
 
+		Domain string
+		Hidden bool
 		Id string
+		Is_self bool
 		Name string
+		Num_comments int
+		Over_18 bool
 		Permalink string
 		Score int
 		Title string
