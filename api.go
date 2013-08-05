@@ -10,7 +10,8 @@ import "net/url"
 import "strconv"
 import "time"
 
-const REDDIT_URL = "https://ssl.reddit.com"
+const REDDIT_HTTPS_URL = "https://ssl.reddit.com"
+const REDDIT_URL = "http://www.reddit.com"
 const DELAY_S = 2 * time.Second
 
 // Client represents a custom Reddit client that respects the Reddit API rate limit guidelines
@@ -66,7 +67,7 @@ func (c *Client) Login(user string, passwd string) error {
 	params.Set("api_type", "json")
 	params.Set("user", user)
 	params.Set("passwd", passwd)
-	req, err := http.NewRequest("POST", fmt.Sprintf("%v/%v?%v", REDDIT_URL, "api/login", params.Encode()), nil)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%v/%v?%v", REDDIT_HTTPS_URL, "api/login", params.Encode()), nil)
 	if err != nil {
 		return err
 	}
